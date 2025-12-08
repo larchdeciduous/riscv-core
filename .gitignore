@@ -1,0 +1,7 @@
+*.history
+_build/
+hardware.*
+*.json
+mytemp/
+report
+synth_top.*
