@@ -1,17 +1,18 @@
 # synth.ys – the absolute simplest & most robust ECP5 flow in 2025
-read_verilog -sv apiodir/alu.v apiodir/datamem.v  apiodir/instf.v  apiodir/instmem.v apiodir/registers.v  apiodir/riscvcore.v  apiodir/sdram.v  # or just: read_verilog -sv *.v
+read_verilog -sv apiodir/riscvcore.v  apiodir/alu.v apiodir/datamem.v apiodir/instf.v apiodir/instmem.v apiodir/registers.v apiodir/sdram.v pll.v
+# or just: read_verilog -sv *.v
 
 # One single line loads ALL ECP5 primitive definitions (blackboxes + sim models)
 read_verilog -lib +/ecp5/*
 
-hierarchy -check -top riscvcore
+hierarchy -check -auto-top
 
 #proc; opt; fsm; opt; memory; opt
 #show -format png sdram
 #techmap; opt
-
+#setattr -set keep 1 w:*
 # One single command does everything ECP5-specific
-synth_ecp5
+synth_ecp5 #-noabc9
 
 stat
 write_json synth_top.json

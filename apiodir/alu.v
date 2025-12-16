@@ -19,11 +19,11 @@ always @(*) begin
 		4'h7: result = $signed(src1) >>> src2[4:0];
 		4'h8: result = src1 | src2;
 		4'h9: result = src1 & src2;
-		default: result = {31{1'b1}};
+		default: result = {32{1'b1}};
 	endcase
 end
 
-assign ifZero = result ? 1'b0 : 1'b1;
+assign ifZero = (result == 0) ? 1'b1 : 1'b0;
 
 
 endmodule

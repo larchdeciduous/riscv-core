@@ -1,8 +1,9 @@
-module insf(
+module instf(
 input clk,
 input rst,
 input stall,
 input [31:0] instruction,
+input ifZero,
 output reg [31:0] pc,
 output [4:0] rs1,
 output [4:0] rs2,
@@ -18,7 +19,7 @@ output reg [1:0] rdSrc,
 output reg rdWrite,
 output reg memWrite,
 output reg memRead,
-output reg [1:0]ifJump
+output [2:0] memSignWidth
 );
 wire [6:0] func7, opcode;
 wire [2:0] func3;
@@ -39,7 +40,9 @@ assign immej20 = { instruction[31], instruction[19:12], instruction[20], instruc
 
 assign jumpTo = { {21{imme[11]}}, imme[10:1], 1'b0 };
 assign jumpToj = { {20{immej[11]}}, immej[10:0], 1'b0 };
-assign jumpToj20 = { {11{immej20[19]}}, immej20[18:0], 1'b0 };
+assign jumpToj20 = { {12{immej20[19]}}, immej20[18:0], 1'b0 };
+assign memSignWidth = func3;
+reg [1:0] ifJump;
 always @(posedge clk) begin
 	if(rst)
 		pc <= 0;
@@ -47,8 +50,8 @@ always @(posedge clk) begin
 		pc <= pc;
 	else begin
 		case(ifJump)
-			2'b00: pc <= pc + 4'h4;
-			2'b01: pc <= pc + jumpTo;
+			2'b00: pc <= pc + 32'h4;
+			2'b01: pc <= rs1Data + jumpTo;
 			2'b10: pc <= pc + jumpToj20;
 			2'b11: pc <= pc + jumpToj;
 		endcase
@@ -61,43 +64,33 @@ always @(*) begin
 	//R-type Instruction
 	case(opcode)
 		7'b0110011: begin
-			//aluCtl = 0;
 			ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
 			aluSrc2 = 0;
 			aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
 			memWrite = 0;
 			memRead = 0;
 
 			rdWrite = 1'b1;
 			rdSrc = 2'b00;
-			case({ func7[5], func3 })
-				4'b0_000: aluCtl = 4'h0;
-				4'b1_000: aluCtl = 4'h1;
-				4'b0_001: aluCtl = 4'h2;
-				4'b0_010: aluCtl = 4'h3;
-				4'b0_011: aluCtl = 4'h4;
-				4'b0_100: aluCtl = 4'h5;
-				4'b0_101: aluCtl = 4'h6;
-				4'b1_101: aluCtl = 4'h7;
-				4'b0_110: aluCtl = 4'h8;
-				4'b0_111: aluCtl = 4'h9;
+			case(func3)
+				3'b000: aluCtl = (func7[5]) ? 4'h1 : 4'h0;
+				3'b001: aluCtl = 4'h2;
+				3'b010: aluCtl = 4'h3;
+				3'b011: aluCtl = 4'h4;
+				3'b100: aluCtl = 4'h5;
+				3'b101: aluCtl = (func7[5]) ? 4'h7 : 4'h6;
+				3'b110: aluCtl = 4'h8;
+				3'b111: aluCtl = 4'h9;
 			endcase
 		end
 
 	//I-type instruction
 		7'b0010011: begin
-			//aluCtl = 0;
 			ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
-			//aluSrc2 = 0;
-			//aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
 			memWrite = 0;
 			memRead = 0;
 
@@ -116,39 +109,32 @@ always @(*) begin
 				3'b111: aluCtl = 4'h9;
 			endcase
 		end
-		7'b0000011: begin //LB LH LW LBU LHU
-			//aluCtl = 0;
+
+	// Load instruction
+		7'b0000011: begin
 			ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
-			//aluSrc2 = 0;
-			//aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
-			memWrite = 0;
-			//memRead = 0;
-
-			aluCtl = 4'h0;
 			aluSrc2 = { {21{imme[11]}}, imme[10:0] };
 			aluSrc2En = 1'b1;
 			memRead = 1'b1;
 			rdWrite = 1'b1;
 			rdSrc = 2'b01;
+			aluCtl = 4'h0;
+			memWrite = 0;
 		end	
 		7'b1100111: begin //JALR
-			//aluCtl = 0;
-			//ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
 			aluSrc2 = 0;
 			aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
 			memWrite = 0;
 			memRead = 0;
 
 			aluCtl = 4'h0;
 			rdWrite = 1'b1;
+			aluSrc2 = 0;
+			aluSrc2En = 0;
 			rdSrc = 2'b10;
 			ifJump = 2'b01;
 		end
@@ -159,69 +145,48 @@ always @(*) begin
 			ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
-			//aluSrc2 = 0;
-			//aluSrc2En = 0;
 			rdWrite = 0;
 			rdSrc = 0;
-			//memWrite = 0;
 			memRead = 0;
 
-			aluSrc2 = { {20{func7[6]}}, func7[5:0], rd };
+			aluSrc2 = { {20{func7[6]}}, func7[6:0], rd };
 			aluSrc2En = 1'b1;
 			memWrite = 1'b1;
 		end
 
 	//U-type instruction
 		7'b0110111: begin //LUI
-			//aluCtl = 0;
 			ifJump = 0;
-			//aluSrc1 = 0;
-			//aluSrc1En = 0;
-			//aluSrc2 = 0;
-			//aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
+			aluSrc1En = 1'b1;
+			aluSrc2 = { imme20, {12{1'b0}} };
+			aluSrc2En = 1'b1;
 			memWrite = 0;
 			memRead = 0;
 
 			aluCtl = 0;
 			aluSrc1 = 0;
-			aluSrc1En = 1'b1;
-			aluSrc2 = { imme20, {12{1'b0}} };
-			aluSrc2En = 1'b1;
 			rdWrite = 1'b1;
 			rdSrc = 0;
 		end
 		7'b0010111: begin //AUIPC
-			//aluCtl = 0;
 			ifJump = 0;
-			//aluSrc1 = 0;
-			//aluSrc1En = 0;
-			//aluSrc2 = 0;
-			//aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
-			memWrite = 0;
-			memRead = 0;
-
-			aluCtl = 0;
 			aluSrc1 = pc;
 			aluSrc1En = 1'b1;
 			aluSrc2 = { imme20, {12{1'b0}} };
 			aluSrc2En = 1'b1;
+			memWrite = 0;
+			memRead = 0;
+
+			aluCtl = 0;
 			rdWrite = 1'b1;
 			rdSrc = 0;
 		end
 	//J-type instruction
 		7'b1101111: begin //JAL
-			//aluCtl = 0;
-			//ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
 			aluSrc2 = 0;
 			aluSrc2En = 0;
-			//rdWrite = 0;
-			//rdSrc = 0;
 			memWrite = 0;
 			memRead = 0;
 
@@ -233,8 +198,6 @@ always @(*) begin
 
       //SB-type instruction
 		7'b1100011: begin
-			//aluCtl = 0;
-			//ifJump = 0;
 			aluSrc1 = 0;
 			aluSrc1En = 0;
 			aluSrc2 = 0;
@@ -243,17 +206,39 @@ always @(*) begin
 			rdSrc = 0;
 			memWrite = 0;
 			memRead = 0;
-
-			aluCtl = 4'b0;
+			ifJump = 2'b00;
 			case(func3)
-				3'b000: ifJump = (rs1Data == rs2Data) ? 2'b11 : 2'b0;
-				3'b001: ifJump = (rs1Data != rs2Data) ? 2'b11 : 2'b0;
-				3'b100: ifJump = ($signed(rs1Data) < $signed(rs2Data)) ? 2'b11 : 2'b0;
-				3'b101: ifJump = ($signed(rs1Data) >= $signed(rs2Data)) ? 2'b11 : 2'b0;
-				3'b110: ifJump = (rs1Data < rs2Data) ? 2'b11 : 2'b0;
-				3'b111: ifJump = (rs1Data >= rs2Data) ? 2'b11 : 2'b0;
+				3'b000: begin // BEQ
+					aluCtl = 4'h1;
+					ifJump = ifZero ? 2'b11 : 2'b00;
+				end
+				3'b001: begin // BNE
+					aluCtl = 4'h1;
+					ifJump = ~ifZero ? 2'b11 : 2'b00;
+				end
+				3'b100: begin // BLT
+					aluCtl = 4'h3;
+					ifJump = ~ifZero ? 2'b11 : 2'b00;
+				end
+				3'b101: begin // BGE
+					aluCtl = 4'h3;
+					ifJump = ifZero ? 2'b11 : 2'b00;
+				end
+				3'b110: begin // BLTU
+					aluCtl = 4'h4;
+					ifJump = ~ifZero ? 2'b11 : 2'b00;
+				end
+				3'b111: begin // BGEU
+					aluCtl = 4'h4;
+					ifJump = ifZero ? 2'b11 : 2'b00;
+				end
+				default: begin
+					aluCtl = 4'h0;
+					ifJump = 2'b00;
+				end
 			endcase
 		end
+
 		default: begin
 			aluCtl = 0;
 			ifJump = 0;
@@ -273,4 +258,3 @@ end
 
 				
 endmodule
-

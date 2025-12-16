@@ -5,3 +5,6 @@ hardware.*
 mytemp/
 report
 synth_top.*
+*.log
+*.vcd
+sim_top
