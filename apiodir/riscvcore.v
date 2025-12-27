@@ -1,3 +1,4 @@
+`default_nettype none
 module riscvcore(
 input clk,
 //input rst,//sim
@@ -17,17 +18,22 @@ output [12:0] SDRAM_A,
 output [1:0] SDRAM_BA,
 inout [15:0] SDRAM_DQ,
 output SDRAM_DQML,
-output SDRAM_DQMH
+output SDRAM_DQMH,
+//hdmi io
+output [3:0] gpdi_dp,
+output [3:0] gpdi_dn
 );
 
+//core wire
 wire [31:0] pc, instruction, aluOut, aluSrc1, aluSrc2, aluIn1, aluIn2, rs1Data, rs2Data, memOut;
 wire [4:0] rs1Addr, rs2Addr, rdAddr;
 wire [3:0] aluCtl;
 wire [2:0] memSignWidth;
 wire [1:0] rdSrc;
 wire aluSrc1En, aluSrc2En, rdWrite, memWrite, memRead, memOp, memOpFinish, ifZero, stall, initFinish, memInit;
-wire clk0, clk180, locked;
+wire clk0, clk0250, locked;
 
+//sdram wire
 wire sdram_enable;
 wire [23:0] sdram_addr;
 wire sdram_write;
@@ -36,10 +42,30 @@ wire [1:0] sdram_dwidth;
 wire [31:0] sdram_rdata;
 wire sdram_ready;
 
+//frame_buffer wire
+wire [11:0] fb_xpos, fb_ypos;
+wire fb_color, fb_we, fb_re;
+wire [1:0] fb_mask;
+wire [15:0] fb_addr;
+wire [31:0] fb_wdata;
+wire [31:0] fb_rdata;
+
+//hdmi_ctler wire
+wire [23:0] hdmi_color;
+
+//csr wire
+wire [11:0] csr_addr;
+wire [31:0] csr_wdata, csr_rdata, csr_cause, csr_trap_vector, csr_ret_addr, csr_wdataSrc1;
+wire [1:0] csr_next_priv;
+wire csr_write, csr_set, csr_clear, csr_trap_take, csr_mret, csr_sret, csr_wdataSrc1En;
+
+reg [1:0] priv;
+always @(posedge clk)
+    priv <= csr_next_priv;
+
 assign initFinish = memInit;
 assign stall = memOp & (~memOpFinish);
-//TODO global rst  after pll locked  before every init  every need init should
-//have a rst pin
+
 reg rst, rst1delay;
 always @(posedge clk) begin
     if(locked)
@@ -52,33 +78,22 @@ always @(posedge clk) begin
         rst <= 0;
 end
 
-pll pll1
+pll pll0
 (
 .clkin(clk), // 25 MHz, 0 deg
-.clkout0(clk0), // 25 MHz, 0 deg
-.clkout1(clk180), // 25 MHz, 180 deg
+.clkout0(clk0250), // 250 MHz, 0 deg
+.clkout1(clk0), // 25 MHz, 0 deg
 .locked(locked)
 );
 
-
-/*
-always @(*) begin
-	case(rdSrc)
-		2'b00: rdData = aluOut;
-		2'b01: rdData = memOut;
-		2'b10: rdData = pc + 32'h4;
-	endcase
-end
-*/
-// Remove the always @(*) block for rdData
 wire [31:0] rdData;
 assign rdData = (rdSrc == 2'b00) ? aluOut :
                 (rdSrc == 2'b01) ? memOut :
                 (pc + 32'h4);
 
-
 assign aluIn1 = (aluSrc1En) ? aluSrc1 : rs1Data;
 assign aluIn2 = (aluSrc2En) ? aluSrc2 : rs2Data;
+assign csr_wdata = (csr_wdataSrc1En) ? csr_wdataSrc1 : rs1Data;
 
 instMem im(
 .clk(clk0),
@@ -91,23 +106,42 @@ instf insFetch(
 .rst(~initFinish | rst),
 .stall(stall),
 .instruction(instruction),
-.ifZero(ifZero),
 .pc(pc),
+//register
 .rs1(rs1Addr),
 .rs2(rs2Addr),
 .rs1Data(rs1Data),
 .rs2Data(rs2Data),
 .rd(rdAddr),
+.rdSrc(rdSrc),
+.rdWrite(rdWrite),
+//alu
 .aluCtl(aluCtl),
+.ifZero(ifZero),
 .aluSrc1(aluSrc1),
 .aluSrc1En(aluSrc1En),
 .aluSrc2(aluSrc2),
 .aluSrc2En(aluSrc2En),
-.rdSrc(rdSrc),
-.rdWrite(rdWrite),
+//data memory
 .memWrite(memWrite),
 .memRead(memRead),
-.memSignWidth(memSignWidth)
+.memSignWidth(memSignWidth),
+//csr
+.current_priv(priv),
+.csr_addr(csr_addr),
+.csr_wdataSrc1(csr_wdataSrc1),
+.csr_wdataSrc1En(csr_wdataSrc1En),
+.csr_write(csr_write),
+.csr_set(csr_set),
+.csr_clear(csr_clear),
+.csr_rdata(csr_rdata),
+.csr_trap_take(csr_trap_take),
+.csr_mret(csr_mret),
+.csr_sret(csr_sret),
+.csr_trap_pc(pc),
+.csr_cause(csr_cause),
+.csr_trap_vector(csr_trap_vector),
+.csr_ret_addr(csr_ret_addr)
 );
 
 registers rf(
@@ -154,12 +188,18 @@ datamem dm(
 .sdram_ready(sdram_ready),
 //io
 .io_led(LED),
-.io_gpio(GPIO)
+.io_gpio(GPIO),
+//fram_buffer
+.fb_we(fb_we),
+.fb_re(fb_re),
+.fb_mask(fb_mask),
+.fb_addr(fb_addr),
+.fb_wdata(fb_wdata),
+.fb_rdata(fb_rdata)
 );
 
 sdram sdram1 (
 .clk(clk0),
-.clk180(clk180),
 .clk25m(clk0),
 .rst(rst),
 .enable(sdram_enable),
@@ -181,6 +221,58 @@ sdram sdram1 (
 .SDRAM_DQ(SDRAM_DQ),
 .SDRAM_DQML(SDRAM_DQML),
 .SDRAM_DQMH(SDRAM_DQMH)
+);
+
+frame_buffer fb1(
+.clk(clk0),
+.rst(rst),
+//hdmi
+.xpos(fb_xpos),
+.ypos(fb_ypos),
+.color(fb_color),
+//frame_buffer
+.we(fb_we),
+.re(fb_re),
+.mask(fb_mask),
+.addr(fb_addr),
+.wdata(fb_wdata),
+.rdata(fb_rdata)
+);
+
+assign hdmi_color = {24{fb_color}};
+
+hdmi_ctler hdmi1 (
+.clk_25mhz(clk0),
+.clk_250mhz(clk0250),
+.gpdi_dp(gpdi_dp),
+.gpdi_dn(gpdi_dn),
+.xpos(fb_xpos),
+.ypos(fb_ypos),
+.color(hdmi_color)
+);
+
+csr csr1(
+.clk(clk),
+.rst(~initFinish | rst),
+
+.addr(csr_addr),
+.wdata(csr_wdata),
+.write(csr_write),
+.set(csr_set),
+.clear(csr_clear),
+.rdata(csr_rdata),
+
+.trap_take(csr_trap_take),
+.mret(csr_mret),
+.sret(csr_sret),
+
+.trap_pc(pc),
+.trap_cause(csr_cause),
+
+.trap_vector(csr_trap_vector),
+.ret_addr(csr_ret_addr),
+.current_priv(priv),
+.next_priv(csr_next_priv)
 );
 
 endmodule

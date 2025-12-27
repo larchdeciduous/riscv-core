@@ -1,3 +1,4 @@
+`default_nettype none
 module registers(
 input clk,
 input rst,

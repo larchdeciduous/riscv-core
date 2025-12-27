@@ -50,11 +50,12 @@ riscvcore core1(
 .SDRAM_DQMH(SDRAM_DQMH)
 );
 initial begin
-    $dumpvars(0, riscvcore_tb.core1.dm.r_sdram_rdata);
     $dumpvars(0, riscvcore_tb);
     //#400000
 	@(posedge core1.initFinish);
-    #20000;
+    @(posedge (core1.pc == 32'h20));
+    @(posedge (core1.fb_ypos == 12'd479));
+    #4000;
 	$finish;
 end
 

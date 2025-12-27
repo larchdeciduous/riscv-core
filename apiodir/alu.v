@@ -1,3 +1,4 @@
+`default_nettype none
 module alu (
 input clk,
 input [3:0] ctl,

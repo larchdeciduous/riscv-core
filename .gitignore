@@ -8,3 +8,4 @@ synth_top.*
 *.log
 *.vcd
 sim_top
+a.out

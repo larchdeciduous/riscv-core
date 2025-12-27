@@ -5,12 +5,12 @@
 module pll
 (
     input clkin, // 25 MHz, 0 deg
-    output clkout0, // 25 MHz, 0 deg
-    output clkout1, // 25 MHz, 180 deg
+    output clkout0, // 250 MHz, 0 deg
+    output clkout1, // 25 MHz, 0 deg
     output locked
 );
 (* FREQUENCY_PIN_CLKI="25" *)
-(* FREQUENCY_PIN_CLKOP="25" *)
+(* FREQUENCY_PIN_CLKOP="250" *)
 (* FREQUENCY_PIN_CLKOS="25" *)
 (* ICP_CURRENT="12" *) (* LPF_RESISTOR="8" *) (* MFG_ENABLE_FILTEROPAMP="1" *) (* MFG_GMCREF_SEL="2" *)
 EHXPLLL #(
@@ -24,15 +24,15 @@ EHXPLLL #(
         .OUTDIVIDER_MUXD("DIVD"),
         .CLKI_DIV(1),
         .CLKOP_ENABLE("ENABLED"),
-        .CLKOP_DIV(24),
-        .CLKOP_CPHASE(11),
+        .CLKOP_DIV(2),
+        .CLKOP_CPHASE(0),
         .CLKOP_FPHASE(0),
         .CLKOS_ENABLE("ENABLED"),
-        .CLKOS_DIV(24),
-        .CLKOS_CPHASE(23),
+        .CLKOS_DIV(20),
+        .CLKOS_CPHASE(0),
         .CLKOS_FPHASE(0),
         .FEEDBK_PATH("CLKOP"),
-        .CLKFB_DIV(1)
+        .CLKFB_DIV(10)
     ) pll_i (
         .RST(1'b0),
         .STDBY(1'b0),

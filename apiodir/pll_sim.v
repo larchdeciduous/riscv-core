@@ -11,8 +11,17 @@ module pll
     output reg locked
 );
 
-assign clkout0 = (locked) ? clkin : 1'b0;
-assign clkout1 = (locked) ? ~clkin : 1'b0;
+reg r_clkout0, r_clkout1;
+assign clkout0 = (locked) ? r_clkout0 : 1'b0;
+assign clkout1 = (locked) ? r_clkout1 : 1'b0;
+always begin
+    #20 r_clkout1 = 1'b1;
+    #20 r_clkout1 = 0;
+end
+always begin
+    #2 r_clkout0 = 1'b1;
+    #2 r_clkout0 = 0;
+end
 initial begin
     locked = 0;
     #180

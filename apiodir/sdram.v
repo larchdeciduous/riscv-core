@@ -1,6 +1,6 @@
+`default_nettype none
 module sdram (
 input clk,
-input clk180,
 input clk25m,
 input rst,
 input enable,
@@ -70,7 +70,7 @@ always @(posedge clk) begin
 end
 
 
-assign SDRAM_CLK = clk180;
+assign SDRAM_CLK = ~clk;
 	
 reg [9:0] status;
 reg [3:0] command;
@@ -177,6 +177,8 @@ always @(posedge clk) begin
                         cntref_en <= 1'b1; // auto-refresh cnt start
                         status <= IDLE;
                     end // wait 12ns 25mhz is 1 cycles
+                    default: begin
+                    end
                 endcase
                 if (cnt > 3'd2)
                     status <= ERROR;
@@ -255,6 +257,8 @@ always @(posedge clk) begin
                         status <= (r_write) ? WRITE : READ;
                         cnt <= 0;
                     end // wait 18ns 25mhz is 1 cycle
+                    default: begin
+                    end
                 endcase
                 if(cnt > 3'd1)
                     status <= ERROR;
@@ -313,6 +317,8 @@ always @(posedge clk) begin
                         status <= IDLE;
                         cnt <= 0;
                     end
+                    default: begin
+                    end
                 endcase
                 if(cnt > 3'd2)
                     status <= ERROR;
@@ -327,7 +333,7 @@ always @(posedge clk) begin
     end
 end
 
-always @(posedge clk180) begin
+always @(negedge clk) begin
     if(rst) begin
         r_dqdata[0] <= 0;
         r_dqdata[1] <= 0;
