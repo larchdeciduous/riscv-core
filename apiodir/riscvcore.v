@@ -1,8 +1,6 @@
 `default_nettype none
 module riscvcore(
 input clk,
-//input rst,//sim
-
 //gpio io
 output [7:0] GPIO,
 //led io
@@ -58,6 +56,7 @@ wire [11:0] csr_addr;
 wire [31:0] csr_wdata, csr_rdata, csr_cause, csr_trap_vector, csr_ret_addr, csr_wdataSrc1;
 wire [1:0] csr_next_priv;
 wire csr_write, csr_set, csr_clear, csr_trap_take, csr_mret, csr_sret, csr_wdataSrc1En;
+wire csr_mtip, csr_interrupt_timer;
 
 reg [1:0] priv;
 always @(posedge clk)
@@ -141,7 +140,8 @@ instf insFetch(
 .csr_trap_pc(pc),
 .csr_cause(csr_cause),
 .csr_trap_vector(csr_trap_vector),
-.csr_ret_addr(csr_ret_addr)
+.csr_ret_addr(csr_ret_addr),
+.csr_interrupt_timer(csr_interrupt_timer)
 );
 
 registers rf(
@@ -168,6 +168,7 @@ alu aluu(
 
 datamem dm(
 .clk(clk0),
+.clk25m(clk0),
 .rst(rst),
 .data(rs2Data),
 .addr(aluOut),
@@ -195,7 +196,9 @@ datamem dm(
 .fb_mask(fb_mask),
 .fb_addr(fb_addr),
 .fb_wdata(fb_wdata),
-.fb_rdata(fb_rdata)
+.fb_rdata(fb_rdata),
+//csr
+.csr_mtip(csr_mtip)
 );
 
 sdram sdram1 (
@@ -203,7 +206,8 @@ sdram sdram1 (
 .clk25m(clk0),
 .rst(rst),
 .enable(sdram_enable),
-.addr(sdram_addr),
+.addr(sdram_addr[23:1]),
+.odd_access(sdram_addr[0]),
 .write(sdram_write),
 .write_data(sdram_wdata),
 .data_width(sdram_dwidth),
@@ -272,7 +276,9 @@ csr csr1(
 .trap_vector(csr_trap_vector),
 .ret_addr(csr_ret_addr),
 .current_priv(priv),
-.next_priv(csr_next_priv)
+.next_priv(csr_next_priv),
+.interrupt_timer(csr_interrupt_timer),
+.mtip(csr_mtip)
 );
 
 endmodule

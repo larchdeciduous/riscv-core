@@ -8,7 +8,7 @@ output [31:0] dataOut
 reg [31:0] rom [1023:0];
 
 initial begin
-	$readmemh("inst.rom", rom, 0, 109);
+	$readmemh("inst.rom", rom, 0, 511);
 end
 
 assign dataOut = rom[addr[11:2]];

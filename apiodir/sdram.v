@@ -4,10 +4,11 @@ input clk,
 input clk25m,
 input rst,
 input enable,
-input [23:0] addr,
+input [22:0] addr, //23 bit, not 24 bit
+input odd_access, // support byte halfword, not word
 input write,
 input [31:0] write_data,
-input [1:0] data_width,
+input [1:0] data_width, // 00byte 01halfword 10word
 output [31:0] read_data,
 output reg ready,
 /*
@@ -80,15 +81,15 @@ assign { SDRAM_DQMH, SDRAM_DQML } = dqm;
 reg [15:0] dq;
 reg dq_en;
 assign SDRAM_DQ = (dq_en) ? dq : 16'bz;
-(* keep *)reg [12:0] active_row [3:0];
+reg [12:0] active_row [3:0];
 reg [3:0] active_flags;
 wire if_actived;
-assign if_actived = (active_row[addr[23:22]] == addr[21:9]) & (active_flags[addr[23:22]]);
+assign if_actived = (active_row[addr[22:21]] == addr[20:8]) & (active_flags[addr[22:21]]);
 reg r_write;
 reg [15:0] r_write_data [1:0];
 reg [15:0] r_read_data [1:0];
 reg [15:0] r_dqdata [1:0];
-reg [23:0] r_addr;
+reg [22:0] r_addr;
 //                                                a0=1 , 1-0        a0=0 , 0-1
 //                                                [31:16]-[1]       [15:0]-0
 //                                                for 32 bit order, it read
@@ -101,15 +102,26 @@ assign read_data = r_addr[0] ? { r_read_data[0], r_read_data[1] } : { r_read_dat
 
 wire [1:0] dqm0, dqm1; // dqm in low active,2 cycle latency, before write need high-z 1 cycle
 reg [1:0] r_data_width;
-assign dqm0 = (r_data_width == 0) ? 2'b10 : 2'b00;
-assign dqm1 = (r_data_width[1]) ? 2'b00 : 2'b11;
+reg r_odd_access;
+
+// 00byte 01halfword 10 word / odd access: 00byte 01halfword
+always @(*) begin
+    case({ r_odd_access, r_data_width })
+        3'b0_00: { dqm1, dqm0 } = 4'b1110;
+        3'b0_01: { dqm1, dqm0 } = 4'b1100;
+        3'b0_10: { dqm1, dqm0 } = 4'b0000;
+        3'b1_00: { dqm1, dqm0 } = 4'b1101;
+        3'b1_01: { dqm1, dqm0 } = 4'b1001;
+        default: { dqm1, dqm0 } = 4'b1111;
+    endcase
+end
 
 wire [1:0] addr_bank;
 wire [12:0] addr_row;
-wire [8:0] addr_col;
-assign addr_bank = r_addr[23:22];
-assign addr_row = r_addr[21:9];
-assign addr_col = r_addr[8:0];
+wire [7:0] addr_col;
+assign addr_bank = r_addr[22:21];
+assign addr_row = r_addr[20:8];
+assign addr_col = r_addr[7:0];
 always @(posedge clk) begin
     if(rst) begin
         SDRAM_CKE <= 0; command <= C_NOP; SDRAM_A <= 0; SDRAM_BA <= 0; SDRAM_CKE <= 0;
@@ -226,6 +238,7 @@ always @(posedge clk) begin
                         r_write_data[1] <= addr[0] ? write_data[15:0] : write_data[31:16];
                         r_addr <= addr;
                         r_data_width <= data_width;
+                        r_odd_access <= odd_access;
                     end
 
                     casez ({ enable, write, if_actived })

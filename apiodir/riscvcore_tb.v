@@ -21,7 +21,8 @@ wire [1:0] SDRAM_BA;
 wire [15:0] SDRAM_DQ;
 wire SDRAM_DQML;
 wire SDRAM_DQMH;
-
+//hdmi io
+wire [3:0] gpdi_dp, gpdi_dn;
 genvar i;
 generate
     for ( i = 0; i < 16; i = i + 1) begin : pulluploop
@@ -31,8 +32,7 @@ endgenerate
 
 riscvcore core1(
 .clk(clk),
-
-//debug io
+//gpio io
 .GPIO(GPIO),
 //led io
 .LED(LED),
@@ -47,15 +47,18 @@ riscvcore core1(
 .SDRAM_BA(SDRAM_BA),
 .SDRAM_DQ(SDRAM_DQ),
 .SDRAM_DQML(SDRAM_DQML),
-.SDRAM_DQMH(SDRAM_DQMH)
+.SDRAM_DQMH(SDRAM_DQMH),
+//hdmi io
+.gpdi_dp(gpdi_dp),
+.gpdi_dn(gpdi_dn)
 );
 initial begin
     $dumpvars(0, riscvcore_tb);
     //#400000
 	@(posedge core1.initFinish);
-    @(posedge (core1.pc == 32'h20));
-    @(posedge (core1.fb_ypos == 12'd479));
-    #4000;
+    //@(posedge (core1.pc == 32'h20));
+    //@(posedge (core1.fb_ypos == 12'd479));
+    #40000;
 	$finish;
 end
 
