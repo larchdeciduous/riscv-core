@@ -26,7 +26,7 @@ wire [3:0] gpdi_dp, gpdi_dn;
 genvar i;
 generate
     for ( i = 0; i < 16; i = i + 1) begin : pulluploop
-        pullup (SDRAM_DQ[i]);
+        pullup(SDRAM_DQ[i]);
     end
 endgenerate
 
@@ -58,7 +58,7 @@ initial begin
 	@(posedge core1.initFinish);
     //@(posedge (core1.pc == 32'h20));
     //@(posedge (core1.fb_ypos == 12'd479));
-    #40000;
+    #400000;
 	$finish;
 end
 

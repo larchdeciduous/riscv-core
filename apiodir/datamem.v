@@ -11,9 +11,10 @@ output reg initFinish,
 output op,
 output reg opFinish,
 output reg [31:0] dataOut, //wire
+output illegal,
 //sdram
 output reg sdram_enable,
-output [23:0] sdram_addr,
+output [24:0] sdram_addr,
 output reg sdram_write,
 output [31:0] sdram_wdata,
 output [1:0] sdram_dwidth,
@@ -33,6 +34,11 @@ input [31:0] fb_rdata,
 output reg csr_mtip
 );
 
+reg [31:0] instrom [1023:0];
+initial begin
+    $readmemh("inst.rom", instrom, 0, 1023);
+end
+
 reg [63:0] mtime, mtimecmp;
 always @(posedge clk25m) begin
     if(rst)
@@ -47,7 +53,7 @@ reg odd_access;
 reg [31:0] r_rdata;
 assign op = memRead | memWrite;
 assign sdram_wdata = data;
-assign sdram_addr = addr[23:0];
+assign sdram_addr = addr[24:0];
 assign sdram_dwidth = memSignWidth[1:0];
 assign fb_wdata = data;
 assign fb_addr = addr[15:0];
@@ -57,7 +63,7 @@ always @(*) begin
         2'b00: begin //byte
             if(odd_access) begin
                 dataOut[7:0] = r_rdata[15:8];
-                dataOut[31:16] = (memSignWidth[2]) ? 24'b0 : {24{r_rdata[15]}};
+                dataOut[31:8] = (memSignWidth[2]) ? 24'b0 : {24{r_rdata[15]}};
             end
             else begin
                 dataOut[7:0] = r_rdata[7:0];
@@ -79,8 +85,9 @@ always @(*) begin
         end
     endcase
 end
+assign illegal = addr[0] & (memSignWidth[1:0] == 2'b10) & ((addr[31:24] == 8'h80) | (addr[31:24] == 8'h81));
 
-reg [1:0] status;
+reg [2:0] status;
 always @(posedge clk) begin
     if(rst) begin
         status <= 0; opFinish <= 0; initFinish <= 0; io_led <= 0; io_gpio <= 0;
@@ -88,10 +95,11 @@ always @(posedge clk) begin
         sdram_write <= 0;
         mtimecmp <= 64'hffff_ffff_ffff_ffff;
         odd_access <= 0;
+        r_rdata <= 0;
     end
     else begin
         case (status)
-            2'd0: begin
+            3'd0: begin
                 opFinish <= 0;
                 sdram_enable <= 0;
                 sdram_write <= 0;
@@ -100,28 +108,45 @@ always @(posedge clk) begin
 
                 initFinish <= 0;
                 if(sdram_ready) begin
-                    status <= 2'd1;
+                    status <= 3'd1;
                     initFinish <= 1'b1;
                 end
             end
-            2'd1: begin // waitting
+            3'd1: begin // waitting
                 opFinish <= 0;
                 io_led <= io_led;
-                io_gpio <= io_gpio;
                 if (memRead | memWrite) begin
+                    opFinish <= 0;
                     sdram_enable <= 0;
                     sdram_write <= 0;
                     fb_re <= 0;
                     fb_we <= 0;
                     odd_access <= 0;
-                    status <= 2'd1;
-                    case(addr[31:24])
+                    status <= 3'd1;
+                    case(addr[31:24]) // may future : case(1'b1) (addr[31:24]==8'h10): begin end endcase
+                        8'h00: begin
+                            if(memRead) begin
+                                r_rdata <= instrom[addr[11:2]];
+                            end
+                        end
                         8'h10: begin // gpio led
-                            if(addr[23:0] == 0)
-                                io_led <= data[2:0];
-                            else if(addr[23:0] == 24'h000001)
-                                io_gpio <= data[7:0];
-                            status <= 2'd2;
+                            if(memRead) begin
+                                case(addr[23:0])
+                                    24'h000000: r_rdata <= { 29'b0, io_led };
+                                    24'h000001: r_rdata <= { 24'b0, io_gpio };
+                                    default: r_rdata = 0;
+                                endcase
+                            end
+                            else if (memWrite) begin
+                                case(addr[23:0])
+                                    24'h000000: io_led <= data[2:0];
+                                    24'h000001: io_gpio <= data[7:0];
+                                    default: begin
+                                    end
+                                endcase
+                            end
+                            opFinish <= 1'b1;
+                            status <= 3'd4;
                         end
                         8'h20: begin
                             if(memRead) begin
@@ -141,46 +166,58 @@ always @(posedge clk) begin
                                     end
                                 endcase
                             end
+                            opFinish <= 1'b1;
+                            status <= 3'd4;
                         end
                         8'h21: begin // graphicMem
                             fb_re <= memRead;
                             fb_we <= memWrite;
-                            status <= 2'd2;
+                            status <= 3'd2;
                         end
 
                         8'h80: begin // sdram
                             sdram_enable <= 1'b1;
                             sdram_write <= memWrite;
-                            odd_access <= 1'b1;
+                            odd_access <= addr[0];
+                        end
+                        8'h81: begin // sdram
+                            sdram_enable <= 1'b1;
+                            sdram_write <= memWrite;
+                            odd_access <= addr[0];
                         end
                         default: begin
                             sdram_enable <= 0;
                             sdram_write <= 0;
                             fb_re <= 0;
                             fb_we <= 0;
-                            status <= 2'd1;
+                            status <= 3'd1;
                             odd_access <= 0;
                         end
                     endcase
                     if(~sdram_ready) begin
-                        status <= 2'd2;
+                        status <= 3'd2;
                     end
                 end
             end
-            2'd2: begin
+            3'd2: begin
                 sdram_enable <= 0;
                 sdram_write <= 0;
                 fb_re <= 0;
                 fb_we <= 0;
                 if(sdram_ready) begin
-                    status <= 2'd3;
+                    status <= 3'd3;
                     opFinish <= 1'b1;
-                    r_rdata <= (addr[31:24] == 8'h80) ? sdram_rdata : 32'b0;
+                    r_rdata <= (addr[31:24] == 8'h80) ? sdram_rdata : r_rdata;
                 end
             end
-            2'd3: begin // wait pc go next before return to waitting, or get graphic data
-                r_rdata <= (addr[31:24] == 8'h20) ? fb_rdata : 32'b0;
-                status <= 2'd1;
+            3'd3: begin // wait pc go next before return to waitting
+                r_rdata <= (addr[31:24] == 8'h20) ? fb_rdata : r_rdata;
+                status <= 3'd1;
+                opFinish <= 0;
+            end
+            3'd4: begin // fast return
+                opFinish <= 0;
+                status <= 3'd1;
             end
                     
         endcase

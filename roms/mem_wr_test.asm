@@ -52,11 +52,6 @@ _start:
     li t3, 0x000000ef     # Expected zero-extended value (fixed from original 0xab bug)
     bne t2, t3, fail
 
-success:
-    # All tests passed
-    li a0, 0x00000007              # Set a0 to 7 for pass light 3 led
-    sw a0, 0(t1)
-    j success
 
 fail:
     li a0, 0x00000003              # Set a0 to 3 for nopass light 2 led
@@ -64,3 +59,8 @@ fail:
     j fail
 
     # End of program
+success:
+    # All tests passed
+    li a0, 0x00000007              # Set a0 to 7 for pass light 3 led
+    sw a0, 0(t1)
+    j success

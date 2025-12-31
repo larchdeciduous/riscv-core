@@ -4,17 +4,13 @@ input clk,
 input clk25m,
 input rst,
 input enable,
-input [22:0] addr, //23 bit, not 24 bit
+input [23:0] addr, //24 bit for 16bit data
 input odd_access, // support byte halfword, not word
 input write,
 input [31:0] write_data,
 input [1:0] data_width, // 00byte 01halfword 10word
 output [31:0] read_data,
 output reg ready,
-/*
-output [9:0] status_out,
-output cnt_out,
-*/
 
 output SDRAM_CLK,
 output reg SDRAM_CKE,
@@ -84,12 +80,12 @@ assign SDRAM_DQ = (dq_en) ? dq : 16'bz;
 reg [12:0] active_row [3:0];
 reg [3:0] active_flags;
 wire if_actived;
-assign if_actived = (active_row[addr[22:21]] == addr[20:8]) & (active_flags[addr[22:21]]);
+assign if_actived = (active_row[addr[23:22]] == addr[21:9]) & (active_flags[addr[23:22]]);
 reg r_write;
 reg [15:0] r_write_data [1:0];
 reg [15:0] r_read_data [1:0];
 reg [15:0] r_dqdata [1:0];
-reg [22:0] r_addr;
+reg [23:0] r_addr;
 //                                                a0=1 , 1-0        a0=0 , 0-1
 //                                                [31:16]-[1]       [15:0]-0
 //                                                for 32 bit order, it read
@@ -100,7 +96,7 @@ reg [22:0] r_addr;
 // original order: assign read_data = r_addr[0] ? { r_read_data[1], r_read_data[0] } : { r_read_data[0], r_read_data[1] };
 assign read_data = r_addr[0] ? { r_read_data[0], r_read_data[1] } : { r_read_data[1], r_read_data[0] };
 
-wire [1:0] dqm0, dqm1; // dqm in low active,2 cycle latency, before write need high-z 1 cycle
+reg [1:0] dqm0, dqm1; // dqm in low active,2 cycle latency, before write need high-z 1 cycle
 reg [1:0] r_data_width;
 reg r_odd_access;
 
@@ -118,10 +114,10 @@ end
 
 wire [1:0] addr_bank;
 wire [12:0] addr_row;
-wire [7:0] addr_col;
-assign addr_bank = r_addr[22:21];
-assign addr_row = r_addr[20:8];
-assign addr_col = r_addr[7:0];
+wire [8:0] addr_col;
+assign addr_bank = r_addr[23:22];
+assign addr_row = r_addr[21:9];
+assign addr_col = r_addr[8:0];
 always @(posedge clk) begin
     if(rst) begin
         SDRAM_CKE <= 0; command <= C_NOP; SDRAM_A <= 0; SDRAM_BA <= 0; SDRAM_CKE <= 0;

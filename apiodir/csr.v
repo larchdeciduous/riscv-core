@@ -170,7 +170,9 @@ always @(*) begin
     trap_vector = (medeleg[trap_cause]) ? stvec : mtvec;
     ret_addr = (medeleg[trap_cause]) ? sepc : mepc;
     interrupt_timer = mtip & mie[7] & mstatus_mie;
-    if(mret)
+    if(trap_take)
+        next_priv = (medeleg[trap_cause]) ? 2'b01 : 2'b11;
+    else if(mret)
         next_priv = mstatus_mpp;
     else if(sret)
         next_priv = (mstatus_spp) ? 2'b01 : 2'b00;

@@ -23,17 +23,17 @@ output [3:0] gpdi_dn
 );
 
 //core wire
-wire [31:0] pc, instruction, aluOut, aluSrc1, aluSrc2, aluIn1, aluIn2, rs1Data, rs2Data, memOut;
+wire [31:0] pc, nextPc, instruction, aluOut, aluSrc1, aluSrc2, aluIn1, aluIn2, rs1Data, rs2Data, memOut;
 wire [4:0] rs1Addr, rs2Addr, rdAddr;
 wire [3:0] aluCtl;
 wire [2:0] memSignWidth;
 wire [1:0] rdSrc;
-wire aluSrc1En, aluSrc2En, rdWrite, memWrite, memRead, memOp, memOpFinish, ifZero, stall, initFinish, memInit;
+wire aluSrc1En, aluSrc2En, rdWrite, memWrite, memRead, memOp, memOpFinish, ifZero, stall, initFinish, memInit, memIllegal;
 wire clk0, clk0250, locked;
 
 //sdram wire
 wire sdram_enable;
-wire [23:0] sdram_addr;
+wire [24:0] sdram_addr;
 wire sdram_write;
 wire [31:0] sdram_wdata;
 wire [1:0] sdram_dwidth;
@@ -58,23 +58,43 @@ wire [1:0] csr_next_priv;
 wire csr_write, csr_set, csr_clear, csr_trap_take, csr_mret, csr_sret, csr_wdataSrc1En;
 wire csr_mtip, csr_interrupt_timer;
 
-reg [1:0] priv;
-always @(posedge clk)
-    priv <= csr_next_priv;
-
 assign initFinish = memInit;
 assign stall = memOp & (~memOpFinish);
 
-reg rst, rst1delay;
+reg rst;
+reg [2:0] rstdelay;
 always @(posedge clk) begin
-    if(locked)
-        rst1delay <= 1'b1;
+    if(~locked) begin
+        rstdelay <= 0;
+        rst <= 1'b1;
+    end
     else begin
         rst <= 1'b1;
-        rst1delay <= 0;
+        case(rstdelay)
+            3'h0:
+                rstdelay <= 3'h1;
+            3'h1:
+                rstdelay <= 3'h2;
+            3'h2:
+                rstdelay <= 3'h3;
+            3'h3: begin
+                rst <= 0;
+                rstdelay <= 3'h3;
+            end
+            default: begin
+                rstdelay <= 0;
+                rst <= 1'b1;
+            end
+        endcase
     end
-    if(rst1delay) 
-        rst <= 0;
+end
+
+reg [1:0] priv;
+always @(posedge clk0) begin
+    if(rst)
+        priv <= 2'b11;
+    else
+        priv <= csr_next_priv;
 end
 
 pll pll0
@@ -88,7 +108,8 @@ pll pll0
 wire [31:0] rdData;
 assign rdData = (rdSrc == 2'b00) ? aluOut :
                 (rdSrc == 2'b01) ? memOut :
-                (pc + 32'h4);
+                (rdSrc == 2'b10) ? (pc + 32'h4) :
+                32'b0;
 
 assign aluIn1 = (aluSrc1En) ? aluSrc1 : rs1Data;
 assign aluIn2 = (aluSrc2En) ? aluSrc2 : rs2Data;
@@ -96,7 +117,7 @@ assign csr_wdata = (csr_wdataSrc1En) ? csr_wdataSrc1 : rs1Data;
 
 instMem im(
 .clk(clk0),
-.addr(pc[11:0]),
+.addr(nextPc[11:0]),
 .dataOut(instruction)
 );
 
@@ -106,6 +127,7 @@ instf insFetch(
 .stall(stall),
 .instruction(instruction),
 .pc(pc),
+.nextPc(nextPc),
 //register
 .rs1(rs1Addr),
 .rs2(rs2Addr),
@@ -125,6 +147,7 @@ instf insFetch(
 .memWrite(memWrite),
 .memRead(memRead),
 .memSignWidth(memSignWidth),
+.memIllegal(memIllegal),
 //csr
 .current_priv(priv),
 .csr_addr(csr_addr),
@@ -179,6 +202,7 @@ datamem dm(
 .op(memOp),
 .opFinish(memOpFinish),
 .dataOut(memOut),
+.illegal(memIllegal),
 //sdram
 .sdram_enable(sdram_enable),
 .sdram_addr(sdram_addr),
@@ -206,7 +230,7 @@ sdram sdram1 (
 .clk25m(clk0),
 .rst(rst),
 .enable(sdram_enable),
-.addr(sdram_addr[23:1]),
+.addr(sdram_addr[24:1]),
 .odd_access(sdram_addr[0]),
 .write(sdram_write),
 .write_data(sdram_wdata),
@@ -256,7 +280,7 @@ hdmi_ctler hdmi1 (
 );
 
 csr csr1(
-.clk(clk),
+.clk(clk0),
 .rst(~initFinish | rst),
 
 .addr(csr_addr),

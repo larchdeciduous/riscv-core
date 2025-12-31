@@ -5,6 +5,7 @@ input rst,
 input stall,
 input [31:0] instruction,
 output reg [31:0] pc,
+output reg [31:0] nextPc,
 //register
 output [4:0] rs1,
 output [4:0] rs2,
@@ -24,6 +25,7 @@ output reg aluSrc2En,
 output reg memWrite,
 output reg memRead,
 output [2:0] memSignWidth,
+input memIllegal,
 //csr
 input [1:0] current_priv,
 output reg [11:0] csr_addr,
@@ -42,6 +44,7 @@ input [31:0] csr_trap_vector,
 input [31:0] csr_ret_addr,
 input csr_interrupt_timer
 );
+
 wire [6:0] func7, opcode;
 wire [2:0] func3;
 wire [11:0] imme, immej;
@@ -65,22 +68,25 @@ assign jumpToj20 = { {12{immej20[19]}}, immej20[18:0], 1'b0 };
 assign memSignWidth = func3;
 reg [1:0] ifJump;
 always @(posedge clk) begin
+    pc <= nextPc;
+end
+always @(*) begin
 	if(rst)
-		pc <= 0;
+		nextPc = 0;
 	else if(stall)
-		pc <= pc;
+		nextPc = pc;
     else if(csr_trap_take) begin
-        pc <= csr_trap_vector;
+        nextPc = csr_trap_vector;
     end
     else if(csr_mret | csr_sret) begin
-        pc <= csr_ret_addr;
+        nextPc = csr_ret_addr;
     end
 	else begin
 		case(ifJump)
-			2'b00: pc <= pc + 32'h4;
-			2'b01: pc <= rs1Data + jumpTo;
-			2'b10: pc <= pc + jumpToj20;
-			2'b11: pc <= pc + jumpToj;
+			2'b00: nextPc = pc + 32'h4;
+			2'b01: nextPc = rs1Data + jumpTo;
+			2'b10: nextPc = pc + jumpToj20;
+			2'b11: nextPc = pc + jumpToj;
 		endcase
 	end
 end
@@ -115,10 +121,9 @@ always @(*) begin
     csr_clear = 0;
     if(csr_interrupt_timer) begin
         csr_trap_take = 1'b1;
-        csr_cause = 32'h0888_0007;
+        csr_cause = 32'h8000_0007;
     end
     else begin
-        /*
         //default if not change by opcode
         aluCtl = 0;
         ifJump = 0;
@@ -142,7 +147,6 @@ always @(*) begin
         csr_write = 0;
         csr_set = 0;
         csr_clear = 0;
-        */
         case(opcode)
         //R-type Instruction
             7'b0110011: begin
@@ -202,8 +206,18 @@ always @(*) begin
                 aluSrc1En = 0;
                 aluSrc2 = { {21{imme[11]}}, imme[10:0] };
                 aluSrc2En = 1'b1;
-                memRead = 1'b1;
-                rdWrite = 1'b1;
+                if(memIllegal) begin
+                    csr_trap_take = 1'b1;
+                    csr_cause = 32'h04;
+                    memRead = 0;
+                    rdWrite = 0;
+                end
+                else begin
+                    csr_trap_take = 0;
+                    csr_cause = 0;
+                    memRead = 1'b1;
+                    rdWrite = 1'b1;
+                end
                 rdSrc = 2'b01;
             end	
             7'b1100111: begin //JALR
@@ -218,7 +232,16 @@ always @(*) begin
                 aluSrc1En = 0;
                 aluSrc2 = { {20{func7[6]}}, func7[6:0], rd };
                 aluSrc2En = 1'b1;
-                memWrite = 1'b1;
+                if(memIllegal) begin
+                    csr_trap_take = 1'b1;
+                    csr_cause = 32'h06;
+                    memWrite = 0;
+                end
+                else begin
+                    csr_trap_take = 0;
+                    csr_cause = 0;
+                    memWrite = 1'b1;
+                end
             end
 
         //U-type instruction
@@ -350,7 +373,7 @@ always @(*) begin
                         endcase
                     end
                     3'b001: begin // CSRRW
-                        if(csr_illegal_access) begin
+                        if(~csr_illegal_access) begin
                             csr_addr = imme;
                             csr_wdataSrc1En = 0;
                             csr_write = 1'b1;
@@ -366,7 +389,7 @@ always @(*) begin
                         end
                     end
                     3'b010: begin // CSRRS
-                        if(csr_illegal_access) begin
+                        if(~csr_illegal_access) begin
                             csr_addr = imme;
                             csr_wdataSrc1En = 0;
                             csr_set = 1'b1;
@@ -382,7 +405,7 @@ always @(*) begin
                         end
                     end
                     3'b011: begin // CSRRC
-                        if(csr_illegal_access) begin
+                        if(~csr_illegal_access) begin
                             csr_addr = imme;
                             csr_wdataSrc1En = 0;
                             csr_clear = 1'b1;
@@ -398,7 +421,7 @@ always @(*) begin
                         end
                     end
                     3'b101: begin // CSRRWI
-                        if(csr_illegal_access) begin
+                        if(~csr_illegal_access) begin
                             csr_addr = imme;
                             csr_wdataSrc1 = { 27'b0, rs1 };
                             csr_wdataSrc1En = 1'b1;
@@ -415,7 +438,7 @@ always @(*) begin
                         end
                     end
                     3'b110: begin // CSRRSI
-                        if(csr_illegal_access) begin
+                        if(~csr_illegal_access) begin
                             csr_addr = imme;
                             csr_wdataSrc1 = { 27'b0, rs1 };
                             csr_wdataSrc1En = 1'b1;
@@ -432,7 +455,7 @@ always @(*) begin
                         end
                     end
                     3'b111: begin // CSRRCI
-                        if(csr_illegal_access) begin
+                        if(~csr_illegal_access) begin
                             csr_addr = imme;
                             csr_wdataSrc1 = { 27'b0, rs1 };
                             csr_wdataSrc1En = 1'b1;

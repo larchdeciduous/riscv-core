@@ -2,15 +2,17 @@
 module instMem(
 input clk,
 input [11:0] addr,
-output [31:0] dataOut
+output reg [31:0] dataOut
 );
 
 reg [31:0] rom [1023:0];
 
 initial begin
-	$readmemh("inst.rom", rom, 0, 511);
+	$readmemh("inst.rom", rom, 0, 1023);
 end
 
-assign dataOut = rom[addr[11:2]];
+always @(posedge clk) begin
+    dataOut <= rom[addr[11:2]];
+end
 
 endmodule
