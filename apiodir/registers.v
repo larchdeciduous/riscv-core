@@ -24,9 +24,7 @@ always @(posedge clk) begin
             registers[i] <= 0;
         end
     end
-    else if(stall) begin
-    end
-	else if(rdWrite) 
+	else if(rdWrite & ~stall) 
 		registers[rdAddr] <= rdData;
 end
 

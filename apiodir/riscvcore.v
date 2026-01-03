@@ -19,11 +19,13 @@ output SDRAM_DQML,
 output SDRAM_DQMH,
 //hdmi io
 output [3:0] gpdi_dp,
-output [3:0] gpdi_dn
+output [3:0] gpdi_dn,
+//uart io
+output UART_TX
 );
 
 //core wire
-wire [31:0] pc, nextPc, instruction, aluOut, aluSrc1, aluSrc2, aluIn1, aluIn2, rs1Data, rs2Data, memOut;
+wire [31:0] pc, nextPc, instruction, aluOut, aluSrc1, aluSrc2, aluIn1, aluIn2, rs1Data, rs2Data, memOut, instmem_data;
 wire [4:0] rs1Addr, rs2Addr, rdAddr;
 wire [3:0] aluCtl;
 wire [2:0] memSignWidth;
@@ -57,6 +59,10 @@ wire [31:0] csr_wdata, csr_rdata, csr_cause, csr_trap_vector, csr_ret_addr, csr_
 wire [1:0] csr_next_priv;
 wire csr_write, csr_set, csr_clear, csr_trap_take, csr_mret, csr_sret, csr_wdataSrc1En;
 wire csr_mtip, csr_interrupt_timer;
+
+//uart wire
+wire [31:0] uart_wdata;
+wire uart_we, uart_full;
 
 assign initFinish = memInit;
 assign stall = memOp & (~memOpFinish);
@@ -117,8 +123,11 @@ assign csr_wdata = (csr_wdataSrc1En) ? csr_wdataSrc1 : rs1Data;
 
 instMem im(
 .clk(clk0),
-.addr(nextPc[11:0]),
-.dataOut(instruction)
+.addr(nextPc),
+.dataOut(instruction),
+//datamem
+.datamem_addr(aluOut),
+.datamem_dataOut(instmem_data)
 );
 
 instf insFetch(
@@ -203,6 +212,9 @@ datamem dm(
 .opFinish(memOpFinish),
 .dataOut(memOut),
 .illegal(memIllegal),
+.illegalCause(),
+//instmem
+.instmem_data(instmem_data),
 //sdram
 .sdram_enable(sdram_enable),
 .sdram_addr(sdram_addr),
@@ -222,7 +234,11 @@ datamem dm(
 .fb_wdata(fb_wdata),
 .fb_rdata(fb_rdata),
 //csr
-.csr_mtip(csr_mtip)
+.csr_mtip(csr_mtip),
+//uart
+.uart_wdata(uart_wdata),
+.uart_we(uart_we),
+.uart_full(uart_full)
 );
 
 sdram sdram1 (
@@ -303,6 +319,17 @@ csr csr1(
 .next_priv(csr_next_priv),
 .interrupt_timer(csr_interrupt_timer),
 .mtip(csr_mtip)
+);
+
+
+uart uart1
+( // tx only for now
+.clk(clk0),
+.rst(rst),
+.wdata(uart_wdata),
+.we(uart_we),
+.full(uart_full),
+.tx(UART_TX)
 );
 
 endmodule

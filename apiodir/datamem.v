@@ -12,6 +12,9 @@ output op,
 output reg opFinish,
 output reg [31:0] dataOut, //wire
 output illegal,
+output [31:0] illegalCause,
+//instmem
+input [31:0] instmem_data,
 //sdram
 output reg sdram_enable,
 output [24:0] sdram_addr,
@@ -31,10 +34,22 @@ output [15:0] fb_addr,
 output [31:0] fb_wdata,
 input [31:0] fb_rdata,
 //csr
-output reg csr_mtip
+output reg csr_mtip,
+//uart
+output reg [31:0] uart_wdata,
+output reg uart_we,
+input uart_full
 );
 
-reg [31:0] instrom [1023:0];
+localparam INIT = 3'd0,
+            IDLE = 3'd1,
+            FAST_RETURN = 3'd2,
+            MEM_FB1 = 3'd3,
+            MEM_FB2 = 3'd4,
+            UART_FULL = 3'd5,
+            INSTMEM = 3'd6;
+
+reg [15:0] instrom [2048:0];
 initial begin
     $readmemh("inst.rom", instrom, 0, 1023);
 end
@@ -48,10 +63,30 @@ always @(posedge clk25m) begin
 
     csr_mtip = mtime >= mtimecmp;
 end
+assign op = memWrite | memRead;
+//reg readOp, memOp, fbOp, uartOp;
+//assign op = memOp | fbOp | uartOp | readOp;
+//always @(*) begin
+//    readOp = 0;
+//    memOp = 0;
+//    fbOp = 0;
+//    uartOp = 0;
+//    if(memWrite) begin
+//        if ((addr[31:24] == 8'h80) | (addr[31:24] == 8'h80))
+//            memOp = 1'b1;
+//        if(addr[31:24] == 8'h21)
+//            fbOp = 1'b1;
+//        if(uart_full & (addr[31:8] == 24'h200020))
+//            uartOp = 1'b1;
+//    end
+//    else if(memRead)
+//        readOp = 1'b1;
+//end
+        
+
 
 reg odd_access;
 reg [31:0] r_rdata;
-assign op = memRead | memWrite;
 assign sdram_wdata = data;
 assign sdram_addr = addr[24:0];
 assign sdram_dwidth = memSignWidth[1:0];
@@ -90,31 +125,42 @@ assign illegal = addr[0] & (memSignWidth[1:0] == 2'b10) & ((addr[31:24] == 8'h80
 reg [2:0] status;
 always @(posedge clk) begin
     if(rst) begin
-        status <= 0; opFinish <= 0; initFinish <= 0; io_led <= 0; io_gpio <= 0;
+        status <= INIT; opFinish <= 0; initFinish <= 0; io_led <= 0; io_gpio <= 0;
         sdram_enable <= 0;
         sdram_write <= 0;
         mtimecmp <= 64'hffff_ffff_ffff_ffff;
         odd_access <= 0;
         r_rdata <= 0;
+        
     end
     else begin
         case (status)
-            3'd0: begin
+            INIT: begin
                 opFinish <= 0;
                 sdram_enable <= 0;
                 sdram_write <= 0;
                 io_led <= 0; io_gpio <= 0;
                 odd_access <= 0;
+                uart_wdata <= 0;
+                uart_we <= 0;
 
                 initFinish <= 0;
                 if(sdram_ready) begin
-                    status <= 3'd1;
+                    status <= IDLE;
                     initFinish <= 1'b1;
                 end
             end
-            3'd1: begin // waitting
+            IDLE: begin // waitting
                 opFinish <= 0;
                 io_led <= io_led;
+                sdram_enable <= 0;
+                sdram_write <= 0;
+                fb_re <= 0;
+                fb_we <= 0;
+                odd_access <= 0;
+                uart_wdata <= 0;
+                uart_we <= 0;
+                status <= IDLE;
                 if (memRead | memWrite) begin
                     opFinish <= 0;
                     sdram_enable <= 0;
@@ -122,65 +168,52 @@ always @(posedge clk) begin
                     fb_re <= 0;
                     fb_we <= 0;
                     odd_access <= 0;
-                    status <= 3'd1;
-                    case(addr[31:24]) // may future : case(1'b1) (addr[31:24]==8'h10): begin end endcase
-                        8'h00: begin
-                            if(memRead) begin
-                                r_rdata <= instrom[addr[11:2]];
-                            end
-                        end
-                        8'h10: begin // gpio led
-                            if(memRead) begin
-                                case(addr[23:0])
-                                    24'h000000: r_rdata <= { 29'b0, io_led };
-                                    24'h000001: r_rdata <= { 24'b0, io_gpio };
-                                    default: r_rdata = 0;
-                                endcase
-                            end
-                            else if (memWrite) begin
-                                case(addr[23:0])
-                                    24'h000000: io_led <= data[2:0];
-                                    24'h000001: io_gpio <= data[7:0];
-                                    default: begin
-                                    end
-                                endcase
-                            end
-                            opFinish <= 1'b1;
-                            status <= 3'd4;
-                        end
-                        8'h20: begin
-                            if(memRead) begin
-                                case(addr[23:0])
-                                    24'h004000: r_rdata <= mtimecmp[31:0];
-                                    24'h004004: r_rdata <= mtimecmp[63:32];
-                                    24'h00bff8: r_rdata <= mtime[31:0];
-                                    24'h00bffc: r_rdata <= mtime[63:32];
-                                    default: r_rdata = 0;
-                                endcase
-                            end
-                            else if (memWrite) begin
-                                case(addr[23:0])
-                                    24'h004000: mtimecmp[31:0] <= data;
-                                    24'h004004: mtimecmp[63:32] <= data;
-                                    default: begin
-                                    end
-                                endcase
-                            end
-                            opFinish <= 1'b1;
-                            status <= 3'd4;
-                        end
-                        8'h21: begin // graphicMem
-                            fb_re <= memRead;
-                            fb_we <= memWrite;
-                            status <= 3'd2;
-                        end
-
-                        8'h80: begin // sdram
-                            sdram_enable <= 1'b1;
-                            sdram_write <= memWrite;
+                    uart_wdata <= 0;
+                    uart_we <= 0;
+                    status <= IDLE;
+                    casez(addr[31:16]) // may future : case(1'b1) (addr[31:24]==8'h10): begin end endcase
+                        16'h0000: begin
+                            status <= INSTMEM;
                             odd_access <= addr[0];
                         end
-                        8'h81: begin // sdram
+                        16'h2000: begin
+                            opFinish <= 1'b1;
+                            status <= FAST_RETURN;
+                            if(memRead) begin
+                                case(addr[15:0])
+                                    16'h0000: r_rdata <= { 29'b0, io_led };
+                                    16'h1000: r_rdata <= { 24'b0, io_gpio };
+                                    16'h4000: r_rdata <= mtimecmp[31:0];
+                                    16'h4004: r_rdata <= mtimecmp[63:32];
+                                    16'hbff8: r_rdata <= mtime[31:0];
+                                    16'hbffc: r_rdata <= mtime[63:32];
+                                    default: r_rdata = 0;
+                                endcase
+                            end
+                            else if (memWrite) begin
+                                case(addr[15:0])
+                                    16'h0000: io_led <= data[2:0];
+                                    16'h1000: io_gpio <= data[7:0];
+                                    16'h2000: begin
+                                        uart_wdata <= data;
+                                        status <= (uart_full) ? UART_FULL : FAST_RETURN;
+                                        uart_we <= (uart_full) ? 1'b0 : 1'b1;
+                                        opFinish <= (uart_full) ? 1'b0 : 1'b1;
+                                    end
+                                    16'h4000: mtimecmp[31:0] <= data;
+                                    16'h4004: mtimecmp[63:32] <= data;
+                                    default: begin
+                                    end
+                                endcase
+                            end
+                        end
+                        16'h2100: begin // graphicMem
+                            fb_re <= memRead;
+                            fb_we <= memWrite;
+                            status <= MEM_FB1;
+                        end
+
+                        { 4'h8, 4'b000z, 8'hzz }: begin // sdram 80-81
                             sdram_enable <= 1'b1;
                             sdram_write <= memWrite;
                             odd_access <= addr[0];
@@ -190,34 +223,63 @@ always @(posedge clk) begin
                             sdram_write <= 0;
                             fb_re <= 0;
                             fb_we <= 0;
-                            status <= 3'd1;
+                            status <= IDLE;
                             odd_access <= 0;
                         end
                     endcase
                     if(~sdram_ready) begin
-                        status <= 3'd2;
+                        status <= MEM_FB1;
                     end
                 end
             end
-            3'd2: begin
+            FAST_RETURN: begin // fast return
+                sdram_enable <= 0;
+                sdram_write <= 0;
+                fb_re <= 0;
+                fb_we <= 0;
+                odd_access <= 0;
+                uart_wdata <= 0;
+                uart_we <= 0;
+                opFinish <= 0;
+                status <= IDLE;
+            end
+            MEM_FB1: begin
                 sdram_enable <= 0;
                 sdram_write <= 0;
                 fb_re <= 0;
                 fb_we <= 0;
                 if(sdram_ready) begin
-                    status <= 3'd3;
+                    status <= MEM_FB2;
                     opFinish <= 1'b1;
                     r_rdata <= (addr[31:24] == 8'h80) ? sdram_rdata : r_rdata;
                 end
             end
-            3'd3: begin // wait pc go next before return to waitting
+            MEM_FB2: begin // wait pc go next before return to waitting
                 r_rdata <= (addr[31:24] == 8'h20) ? fb_rdata : r_rdata;
-                status <= 3'd1;
+                status <= IDLE;
                 opFinish <= 0;
             end
-            3'd4: begin // fast return
-                opFinish <= 0;
-                status <= 3'd1;
+            UART_FULL: begin
+                if(~uart_full) begin
+                    uart_wdata <= data;
+                    uart_we <= 1'b1;
+                    opFinish <= 1'b1;
+                    status <= FAST_RETURN;
+                end
+                else begin
+                    uart_wdata <= data;
+                    uart_we <= 0;
+                    opFinish <= 0;
+                    status <= UART_FULL;
+                end
+            end
+            INSTMEM: begin
+                r_rdata <= instmem_data;
+                opFinish <= 1'b1;
+                status <= FAST_RETURN;
+            end
+            default: begin
+                status <= INIT;
             end
                     
         endcase

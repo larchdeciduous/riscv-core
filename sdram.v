@@ -82,6 +82,7 @@ reg [3:0] active_flags;
 wire if_actived;
 assign if_actived = (active_row[addr[23:22]] == addr[21:9]) & (active_flags[addr[23:22]]);
 reg r_write;
+wire [31:0] write_data_odd;
 reg [15:0] r_write_data [1:0];
 reg [15:0] r_read_data [1:0];
 reg [15:0] r_dqdata [1:0];
@@ -95,6 +96,7 @@ reg [23:0] r_addr;
 //                                          
 // original order: assign read_data = r_addr[0] ? { r_read_data[1], r_read_data[0] } : { r_read_data[0], r_read_data[1] };
 assign read_data = r_addr[0] ? { r_read_data[0], r_read_data[1] } : { r_read_data[1], r_read_data[0] };
+assign write_data_odd = (odd_access) ? { write_data[23:0], 8'b0 } : write_data;
 
 reg [1:0] dqm0, dqm1; // dqm in low active,2 cycle latency, before write need high-z 1 cycle
 reg [1:0] r_data_width;
@@ -230,8 +232,8 @@ always @(posedge clk) begin
                     if (enable) begin
                         cnt <= 0;
                         r_write <= write;          //  a0=1 , 1-0        a0=0 , 0-1
-                        r_write_data[0] <= addr[0] ? write_data[31:16] : write_data[15:0];
-                        r_write_data[1] <= addr[0] ? write_data[15:0] : write_data[31:16];
+                        r_write_data[0] <= addr[0] ? write_data_odd[31:16] : write_data_odd[15:0];
+                        r_write_data[1] <= addr[0] ? write_data_odd[15:0] : write_data_odd[31:16];
                         r_addr <= addr;
                         r_data_width <= data_width;
                         r_odd_access <= odd_access;

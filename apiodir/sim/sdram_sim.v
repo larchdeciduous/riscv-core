@@ -23,7 +23,7 @@ inout [15:0] SDRAM_DQ,
 output SDRAM_DQML,
 output SDRAM_DQMH
 );
-reg [15:0] r_sdram [4095:0];
+reg [15:0] r_sdram [40959:0];
 /*
 integer i;
 initial begin
@@ -49,12 +49,14 @@ always @(posedge clk25m) begin
 end
 
 
-reg [11:0] r_addr;
+reg [15:0] r_addr;
 reg [31:0] r_write_data, r_read_data;
+wire [31:0] write_data_odd;
 reg [1:0] r_data_width;
 reg r_odd_access;
 reg [3:0] status;
 assign read_data = r_read_data;
+assign write_data_odd = (odd_access) ? { write_data[23:0], 8'b0 } : write_data;
 integer i;
 always @(posedge clk) begin
     if(rst) begin
@@ -86,26 +88,26 @@ always @(posedge clk) begin
                 if(enable) begin
                     ready <= 0;
                     status <= (write) ? 4'h4 : 4'h2;
-                    r_addr <= addr;
-                    r_write_data <= write_data;
+                    r_addr <= addr[15:0];
+                    r_write_data <= write_data_odd;
                     r_data_width <= data_width;
                     r_odd_access <= odd_access;
                 end
             end
             4'h2: begin //read
-                r_read_data[15:0] <= r_sdram[r_addr[11:0]];
-                r_read_data[31:16] <= r_sdram[r_addr[11:0] + 12'b1];
+                r_read_data[15:0] <= r_sdram[r_addr[15:0]];
                 status <= 4'h3;
             end
             4'h3: begin
+                r_read_data[31:16] <= r_sdram[r_addr[15:0] + 1];
                 status <= 4'h6;
             end
             4'h4: begin //write
-                r_sdram[r_addr[11:0]] <= r_write_data[15:0];
-                r_sdram[r_addr[11:0] + 12'b1] <= r_write_data[31:16];
+                r_sdram[r_addr[15:0]] <= r_write_data[15:0];
                 status <= 4'h5;
             end
             4'h5: begin
+                r_sdram[r_addr[15:0] + 1] <= r_write_data[31:16];
                 status <= 4'h6;
             end
             4'h6: begin //wait for safe

@@ -21,6 +21,7 @@ wire [1:0] SDRAM_BA;
 wire [15:0] SDRAM_DQ;
 wire SDRAM_DQML;
 wire SDRAM_DQMH;
+wire UART_TX;
 //hdmi io
 wire [3:0] gpdi_dp, gpdi_dn;
 genvar i;
@@ -50,7 +51,9 @@ riscvcore core1(
 .SDRAM_DQMH(SDRAM_DQMH),
 //hdmi io
 .gpdi_dp(gpdi_dp),
-.gpdi_dn(gpdi_dn)
+.gpdi_dn(gpdi_dn),
+//uart io
+.UART_TX(UART_TX)
 );
 initial begin
     $dumpvars(0, riscvcore_tb);
