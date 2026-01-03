@@ -9,3 +9,7 @@ synth_top.*
 *.vcd
 sim_top
 a.out
+croms/*/*.elf
+croms/*/*.rom
+roms/*.elf
+roms/*.rom
