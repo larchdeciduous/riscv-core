@@ -1,6 +1,4 @@
 // start.S
-// Bare-metal boot code for RV32I
-// Executes from ROM at 0x00000000
 // Sets up RAM, drops to User mode, jumps to main()
 
     .section .text.entry

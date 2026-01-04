@@ -36,5 +36,5 @@ SECTIONS
     } > ram
 
     /* Stack grows downward from the very top of 32MB RAM */
-    __stack_top = 0x80001000;
+    __stack_top = 0x82000000;
 }

@@ -3,7 +3,7 @@ ENTRY(_start)
 MEMORY
 {
     rom (rx)  : ORIGIN = 0x00000000, LENGTH = 4K
-    ram (rwx) : ORIGIN = 0x80000000, LENGTH = 8K
+    ram (rwx) : ORIGIN = 0x80000000, LENGTH = 32M
 }
 
 SECTIONS
@@ -34,7 +34,7 @@ SECTIONS
     .stack (NOLOAD) :
     {
         . = ALIGN(16);                       /* ABI requires 16-byte alignment */
-        . = ORIGIN(ram) + LENGTH(ram);       /* Jump to 0x80002000 */
+        . = ORIGIN(ram) + LENGTH(ram);       
         __stack_top = .;                     /* Stack starts here and grows down */
     } > ram
 
