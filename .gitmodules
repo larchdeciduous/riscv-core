@@ -1,0 +1,3 @@
+[submodule "src/include/sdram_controller"]
+	path = src/include/sdram_controller
+	url = https://github.com/larchdeciduous/sdram_controller

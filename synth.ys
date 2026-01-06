@@ -1,5 +1,5 @@
-read_verilog src/*.v pll.v sdram.v
-read_verilog src/lib/hdmi_test_pattern/*.v #hdmi
+read_verilog src/*.v pll.v
+read_verilog src/include/hdmi_test_pattern/*.v #hdmi
 
 # One single line loads ALL ECP5 primitive definitions (blackboxes + sim models)
 read_verilog -lib +/ecp5/*
