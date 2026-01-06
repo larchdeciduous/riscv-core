@@ -13,3 +13,6 @@ croms/*/*.elf
 croms/*/*.rom
 roms/*.elf
 roms/*.rom
+tb/
+sim/
+apio.*
