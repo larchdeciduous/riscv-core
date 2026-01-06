@@ -6,7 +6,7 @@ The core is loaded with a program via `inst.rom` (a hex file for instruction mem
 
 ## Features
 
-- **Instruction Set**: RV32I
+- **Instruction Set**: RV32I_zicsr
 - **Privileges**: Machine mode (M-mode) with CSR support; partial delegation for Supervisor mode (S-mode).
 - **Interrupts**: Timer interrupt (via `mtime` and `mtimecmp` CSRs).
 - **Memory**: 
